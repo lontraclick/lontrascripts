@@ -1,0 +1,78 @@
+document.addEventListener('DOMContentLoaded', () => {
+    (function () {
+        const urlParams = new URLSearchParams(window.location.search);
+        const scriptTag = document.querySelector('script[data-origin-url]');
+        const originUrl = scriptTag ? scriptTag.getAttribute('data-origin-url') : null;
+        
+        // Function to replace spaces with '_s_', dashes with '_d_', and remove slashes
+        const formatSpecialChars = (inputString) =>
+            inputString.replace(/ /g, '_s_').replace(/-/g, '_d_').replace(/\//g, '');
+
+        // Store the gclid in local storage if present in the URL
+        if (urlParams.has('gclid')) {
+            const gclid = urlParams.get('gclid');
+            localStorage.setItem('gclid', gclid);
+        }
+
+        // Retrieve gclid from local storage if not in the URL
+        const gclid = urlParams.get('gclid') || localStorage.getItem('gclid');
+
+        // Get values of 'gclid', 'wbraid', 'msclkid', or 'fbclid' from the url parameters
+        const campaignId = gclid || urlParams.get('wbraid') || urlParams.get('msclkid') || urlParams.get('fbclid');
+        let formattedCampaignId = campaignId;
+
+        // If 'tid' parameter exists, replace its value and set it back
+        if (urlParams.has('tid')) {
+            const originalTid = urlParams.get('tid');
+            const replacedTid = formatSpecialChars(originalTid);
+            urlParams.set('tid', replacedTid);
+        }
+
+        if (campaignId && urlParams.has('tid')) {
+            formattedCampaignId = formatSpecialChars(campaignId);
+        }
+
+        // Create the updated URL parameters string once
+        const updatedParams = urlParams.toString();
+
+        if (updatedParams) {
+            const pageLinks = document.querySelectorAll('a');
+
+            pageLinks.forEach((link) => {
+                const anchorHash = link.hash;
+                let linkHref = link.href.split('#')[0];
+
+                // Replace placeholders with the value of 'formattedCampaignId' in the link
+                if (formattedCampaignId) {
+                    linkHref = linkHref.replace('[sclid]', formattedCampaignId).replace('%5Bsclid%5D', formattedCampaignId);
+                }
+
+                // Append or update URL parameters in the link
+                if (!linkHref.includes('?')) {
+                    linkHref += '?' + updatedParams;
+                } else {
+                    linkHref += '&' + updatedParams;
+                }
+
+                // Update the href attribute of the link
+                link.href = linkHref + anchorHash;
+            });
+            
+            // Send the click ID to the server
+            if (campaignId && originUrl) {
+                const ajaxUrl = `${originUrl}/wp-admin/admin-ajax.php?action=lontraads_record_visit`;
+                fetch(ajaxUrl, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ clickId: campaignId }),
+                })
+                .catch(error => {
+                    console.error('LontraAds: Erro ao enviar dados do visitante:', error);
+                });
+            }
+        }
+    })();
+});
